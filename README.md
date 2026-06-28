@@ -1,5 +1,7 @@
 # hr-letter-generator
 
+**English** | [Bahasa Melayu](README.ms.md) | [中文](README.zh.md)
+
 A simple, no-experience-needed tool that generates a professional **resignation letter**
 as both **Word (.docx)** and **PDF (.pdf)**, in **English, Bahasa Melayu, or Chinese (Simplified)**.
 
