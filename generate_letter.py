@@ -3,7 +3,7 @@
 HR Letter Generator - Resignation Letter (English / Bahasa Melayu / 中文 简体)
 
 Prompts for the required details, auto-calculates the last working day from the
-notice date + notice period (in months), and writes a professional resignation
+notice date + notice period (in days, weeks, or months), and writes a professional resignation
 letter as both Word (.docx) and PDF (.pdf) into the ./generated_letters folder.
 The letter content is generated in the language chosen at the start.
 
@@ -39,6 +39,11 @@ except ImportError as exc:  # pragma: no cover - handled by the launchers
 # --------------------------------------------------------------------------- #
 LANGUAGE_CHOICES = {"1": "en", "2": "ms", "3": "zh", "": "en"}
 
+# Notice-period units. The console UI is English (like every other prompt);
+# only the finished letter is translated.
+NOTICE_UNIT_CHOICES = {"1": "day", "2": "week", "3": "month", "": "month"}
+UNIT_PLURAL_EN = {"day": "days", "week": "weeks", "month": "months"}
+
 TRANSLATIONS = {
     "en": {
         "filename_prefix": "Resignation_Letter",
@@ -49,7 +54,7 @@ TRANSLATIONS = {
         "opening_notice": (
             "Please accept this letter as formal notification of my resignation from the "
             "position of {position} at {company}. In accordance with the terms of my "
-            "employment, I will serve a notice period of {n} {month_word}, with my last "
+            "employment, I will serve a notice period of {period}, with my last "
             "working day being {last_day}."
         ),
         "opening_immediate": (
@@ -88,7 +93,7 @@ TRANSLATIONS = {
         "opening_notice": (
             "Dengan segala hormatnya, surat ini merupakan notis rasmi peletakan jawatan saya "
             "sebagai {position} di {company}. Selaras dengan terma pekerjaan saya, saya akan "
-            "memenuhi tempoh notis selama {n} bulan, dengan hari terakhir saya bekerja pada "
+            "memenuhi tempoh notis selama {period}, dengan hari terakhir saya bekerja pada "
             "{last_day}."
         ),
         "opening_immediate": (
@@ -127,7 +132,7 @@ TRANSLATIONS = {
         "salutation_generic": "尊敬的领导：",
         "opening_notice": (
             "兹正式通知贵公司，本人决定辞去在{company}担任的{position}职务。根据本人雇佣合约的"
-            "规定，本人将履行{n}个月的通知期，最后工作日为{last_day}。"
+            "规定，本人将履行{period}的通知期，最后工作日为{last_day}。"
         ),
         "opening_immediate": (
             "兹正式通知贵公司，本人决定即时辞去在{company}担任的{position}职务，最后工作日为"
@@ -152,6 +157,28 @@ TRANSLATIONS = {
         "signoff": "此致敬礼！",
     },
 }
+
+
+# --------------------------------------------------------------------------- #
+# Notice-period wording, per language and unit
+# --------------------------------------------------------------------------- #
+# English needs singular/plural; Malay and Chinese use one invariant word.
+PERIOD_WORDS = {
+    "en": {"day": ("day", "days"), "week": ("week", "weeks"), "month": ("month", "months")},
+    "ms": {"day": "hari", "week": "minggu", "month": "bulan"},
+    "zh": {"day": "天", "week": "周", "month": "个月"},
+}
+
+
+def format_period(count, unit, lang):
+    """Render the notice period for a language, e.g. '2 weeks', '2 minggu', '2周'."""
+    words = PERIOD_WORDS[lang][unit]
+    if lang == "en":
+        singular, plural = words
+        return f"{count} {singular if count == 1 else plural}"
+    if lang == "zh":
+        return f"{count}{words}"  # no space before Chinese measure words
+    return f"{count} {words}"
 
 
 # --------------------------------------------------------------------------- #
@@ -247,6 +274,21 @@ def ask_language():
         print("  -> Please enter 1, 2 or 3.")
 
 
+def ask_notice_unit():
+    print("Is your notice period counted in days, weeks or months?")
+    print("  1. Day(s)")
+    print("  2. Week(s)")
+    print("  3. Month(s) (default)")
+    while True:
+        try:
+            raw = _strip_bom(input("Enter 1, 2 or 3 [3]: ")).strip()
+        except EOFError:
+            raw = ""
+        if raw in NOTICE_UNIT_CHOICES:
+            return NOTICE_UNIT_CHOICES[raw]
+        print("  -> Please enter 1, 2 or 3.")
+
+
 # --------------------------------------------------------------------------- #
 # Date maths
 # --------------------------------------------------------------------------- #
@@ -259,11 +301,17 @@ def add_months(start, months):
     return date(year, month, min(start.day, last_day_of_month))
 
 
-def compute_last_working_day(start, months):
-    """Last working day = notice date + N months - 1 day (serve through the period)."""
-    if months <= 0:
+def compute_last_working_day(start, count, unit):
+    """Last working day = serve through the notice period, i.e. the day before it ends."""
+    if count <= 0:
         return start
-    return add_months(start, months) - timedelta(days=1)
+    if unit == "month":
+        end = add_months(start, count)
+    elif unit == "week":
+        end = start + timedelta(weeks=count)
+    else:  # day
+        end = start + timedelta(days=count)
+    return end - timedelta(days=1)
 
 
 # --------------------------------------------------------------------------- #
@@ -299,18 +347,18 @@ def find_cjk_font():
 # --------------------------------------------------------------------------- #
 def build_letter(d, lang):
     t = TRANSLATIONS[lang]
-    months = d["notice_months"]
+    count = d["notice_count"]
+    unit = d["notice_unit"]
     kw = dict(
         position=d["your_position"],
         company=d["company"],
         name=d.get("recipient_name", ""),
-        n=months,
-        month_word=("month" if months == 1 else "months"),
+        period=format_period(count, unit, lang),
         last_day=d["last_day"],
         achievements=d.get("achievements", ""),
     )
 
-    opening = (t["opening_immediate"] if months <= 0 else t["opening_notice"]).format(**kw)
+    opening = (t["opening_immediate"] if count <= 0 else t["opening_notice"]).format(**kw)
     gratitude = (t["gratitude_ach"] if d.get("achievements") else t["gratitude_noach"]).format(**kw)
     handover = t["handover"].format(**kw)
     closing_para = t["closing_para"].format(**kw)
@@ -522,8 +570,9 @@ def main():
 
     print("\n-- Notice period --")
     letter_date = ask_date("Date you are giving notice (yyyy-MM-dd)", default_today=True)
-    notice_months = ask_int("Notice period in months", default=1, min_value=0)
-    last_day = compute_last_working_day(letter_date, notice_months)
+    notice_unit = ask_notice_unit()
+    notice_count = ask_int(f"Notice period in {UNIT_PLURAL_EN[notice_unit]}", default=1, min_value=0)
+    last_day = compute_last_working_day(letter_date, notice_count, notice_unit)
     print(f"\n  Computed last working day: {last_day.isoformat()}")
     if not ask_yes_no("  Use this last working day?", default_yes=True):
         last_day = ask_date("  Enter the correct last working day (yyyy-MM-dd)")
@@ -546,7 +595,8 @@ def main():
         "addr1": addr1,
         "city": city,
         "letter_date": letter_date.isoformat(),
-        "notice_months": notice_months,
+        "notice_count": notice_count,
+        "notice_unit": notice_unit,
         "last_day": last_day.isoformat(),
         "achievements": achievements,
     }
@@ -559,7 +609,7 @@ def main():
     print(f"  Position       : {your_position}")
     print(f"  Company        : {company}")
     print(f"  Letter date    : {data['letter_date']}")
-    print(f"  Notice period  : {notice_months} month(s)")
+    print(f"  Notice period  : {format_period(notice_count, notice_unit, 'en')}")
     print(f"  Last working   : {data['last_day']}")
     print("=" * 50)
     if not ask_yes_no("\nGenerate the letter now?", default_yes=True):

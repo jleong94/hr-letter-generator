@@ -9,7 +9,7 @@ Melayu, atau Bahasa Cina (Ringkas)**.
 Anda hanya menjawab beberapa soalan, dan ia akan:
 
 - menulis surat mengikut standard HR / perekrut berpengalaman, dalam bahasa pilihan anda,
-- mengira **hari terakhir bekerja** anda secara automatik daripada tarikh notis + tempoh notis (dalam bulan),
+- mengira **hari terakhir bekerja** anda secara automatik daripada tarikh notis + tempoh notis (dalam hari, minggu, atau bulan),
 - menyimpan kedua-dua fail ke dalam folder `generated_letters/`.
 
 Semua tarikh menggunakan format **`yyyy-MM-dd`** (cth. `2026-06-28`).
@@ -48,7 +48,7 @@ Kali pertama mengambil masa kira-kira seminit untuk pemasangan; kali seterusnya 
 - **Bahasa:** Inggeris (lalai), Bahasa Melayu, atau 中文 (简体) — keseluruhan surat ditulis dalam bahasa ini
 - **Maklumat anda:** nama penuh, jawatan, jabatan, e-mel, telefon
 - **Penerima:** nama, jawatan, syarikat / organisasi, alamat
-- **Notis:** tarikh anda memberi notis (lalai hari ini) dan tempoh notis dalam bulan
+- **Notis:** tarikh anda memberi notis (lalai hari ini), kemudian unit tempoh notis (hari, minggu, atau bulan) dan jumlahnya
 - **Pilihan:** satu pencapaian utama untuk disebut dalam surat
 
 Selepas itu, ia memaparkan **hari terakhir bekerja yang dikira** supaya anda boleh menerimanya atau
@@ -59,11 +59,11 @@ menaip tarikh lain, serta satu ringkasan untuk semakan sebelum menjana surat.
 
 ### Bagaimana hari terakhir bekerja dikira
 
-`hari terakhir bekerja = tarikh notis + tempoh notis (bulan) − 1 hari`
+`hari terakhir bekerja = tarikh notis + tempoh notis − 1 hari` (anda berkhidmat sepanjang tempoh tersebut)
 
 Contohnya, memberi notis pada `2026-06-01` dengan tempoh notis `1` bulan memberikan hari terakhir
-bekerja `2026-06-30`. Anda sentiasa boleh menggantikan tarikh yang dikira semasa menjawab soalan.
-Memasukkan `0` bulan akan menghasilkan surat "berkuat kuasa serta-merta".
+bekerja `2026-06-30`; tempoh `2` minggu memberikan `2026-06-14`. Anda sentiasa boleh menggantikan
+tarikh yang dikira semasa menjawab soalan. Memasukkan `0` akan menghasilkan surat "berkuat kuasa serta-merta".
 
 ---
 

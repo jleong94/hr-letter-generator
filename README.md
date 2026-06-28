@@ -8,7 +8,7 @@ as both **Word (.docx)** and **PDF (.pdf)**, in **English, Bahasa Melayu, or Chi
 You answer a few questions, and it:
 
 - writes the letter to an experienced-HR / recruiter standard, in the language you choose,
-- auto-calculates your **last working day** from the notice date + notice period (in months),
+- auto-calculates your **last working day** from the notice date + notice period (in days, weeks, or months),
 - saves both files into a `generated_letters/` folder.
 
 All dates use the format **`yyyy-MM-dd`** (e.g. `2026-06-28`).
@@ -47,7 +47,7 @@ The first run takes a minute while things install; later runs start immediately.
 - **Language:** English (default), Bahasa Melayu, or 中文 (简体) — the whole letter is written in this language
 - **Your details:** full name, job title, department, email, phone
 - **Recipient:** name, title, company / organisation, address
-- **Notice:** the date you are giving notice (defaults to today) and the notice period in months
+- **Notice:** the date you are giving notice (defaults to today), then the notice-period unit (days, weeks, or months) and how many
 - **Optional:** a key achievement to mention in the letter
 
 It then shows the **computed last working day** so you can accept it or type a different date,
@@ -58,11 +58,11 @@ and a short review before generating.
 
 ### How the last working day is calculated
 
-`last working day = notice date + notice period (months) − 1 day`
+`last working day = notice date + notice period − 1 day` (you serve through the whole period)
 
 For example, giving notice on `2026-06-01` with a `1` month notice period gives a last working
-day of `2026-06-30`. You can always override the computed date during the prompts. Entering `0`
-months produces a "with immediate effect" letter.
+day of `2026-06-30`; a `2` week period gives `2026-06-14`. You can always override the computed
+date during the prompts. Entering `0` produces a "with immediate effect" letter.
 
 ---
 
