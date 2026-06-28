@@ -1,0 +1,7 @@
+# Keep shell launchers as LF so they run on macOS/Linux even when committed from Windows
+*.sh        text eol=lf
+*.command   text eol=lf
+*.py        text eol=lf
+
+# Keep the Windows launcher as CRLF
+*.cmd       text eol=crlf

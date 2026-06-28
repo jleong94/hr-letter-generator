@@ -1,0 +1,594 @@
+#!/usr/bin/env python3
+"""
+HR Letter Generator - Resignation Letter (English / Bahasa Melayu / 中文 简体)
+
+Prompts for the required details, auto-calculates the last working day from the
+notice date + notice period (in months), and writes a professional resignation
+letter as both Word (.docx) and PDF (.pdf) into the ./generated_letters folder.
+The letter content is generated in the language chosen at the start.
+
+This script is normally launched by run.cmd (Windows) or run.command / run.sh
+(macOS), which set up Python and the required packages automatically.
+"""
+
+import os
+import re
+import sys
+import calendar
+import subprocess
+from pathlib import Path
+from datetime import date, datetime, timedelta
+
+try:
+    from docx import Document
+    from docx.shared import Pt, Mm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from fpdf import FPDF
+    from fpdf.enums import XPos, YPos
+except ImportError as exc:  # pragma: no cover - handled by the launchers
+    print()
+    print("Required packages are missing:", exc)
+    print("Please start this tool with run.cmd (Windows) or run.command / run.sh (Mac).")
+    print("Those launchers install everything automatically.")
+    sys.exit(1)
+
+
+# --------------------------------------------------------------------------- #
+# Language data
+# --------------------------------------------------------------------------- #
+LANGUAGE_CHOICES = {"1": "en", "2": "ms", "3": "zh", "": "en"}
+
+TRANSLATIONS = {
+    "en": {
+        "filename_prefix": "Resignation_Letter",
+        "title": "LETTER OF RESIGNATION",
+        "subject": "Re: Resignation from the Position of {position}",
+        "salutation_named": "Dear {name},",
+        "salutation_generic": "Dear Sir/Madam,",
+        "opening_notice": (
+            "Please accept this letter as formal notification of my resignation from the "
+            "position of {position} at {company}. In accordance with the terms of my "
+            "employment, I will serve a notice period of {n} {month_word}, with my last "
+            "working day being {last_day}."
+        ),
+        "opening_immediate": (
+            "Please accept this letter as formal notification of my resignation from the "
+            "position of {position} at {company}, with immediate effect. My last working "
+            "day will be {last_day}."
+        ),
+        "gratitude_ach": (
+            "My time at {company} has been truly rewarding. I am especially grateful for the "
+            "opportunity to {achievements}, as well as for the professional growth, "
+            "mentorship, and collaboration I have enjoyed throughout my tenure."
+        ),
+        "gratitude_noach": (
+            "My time at {company} has been truly rewarding, and I am grateful for the "
+            "professional growth, mentorship, and collaboration I have enjoyed throughout "
+            "my tenure."
+        ),
+        "handover": (
+            "I am committed to ensuring a smooth and professional transition during my "
+            "remaining time. I am glad to assist with handing over my responsibilities, "
+            "documenting ongoing work, training a successor, and completing any outstanding "
+            "deliverables to the best of my ability."
+        ),
+        "closing_para": (
+            "Thank you for your guidance and support during my time here. I wish you and "
+            "{company} continued success, and I hope to remain in touch."
+        ),
+        "signoff": "Yours sincerely,",
+    },
+    "ms": {
+        "filename_prefix": "Surat_Peletakan_Jawatan",
+        "title": "SURAT PELETAKAN JAWATAN",
+        "subject": "Perkara: Peletakan Jawatan sebagai {position}",
+        "salutation_named": "Yang dihormati {name},",
+        "salutation_generic": "Tuan/Puan,",
+        "opening_notice": (
+            "Dengan segala hormatnya, surat ini merupakan notis rasmi peletakan jawatan saya "
+            "sebagai {position} di {company}. Selaras dengan terma pekerjaan saya, saya akan "
+            "memenuhi tempoh notis selama {n} bulan, dengan hari terakhir saya bekerja pada "
+            "{last_day}."
+        ),
+        "opening_immediate": (
+            "Dengan segala hormatnya, surat ini merupakan notis rasmi peletakan jawatan saya "
+            "sebagai {position} di {company}, berkuat kuasa serta-merta. Hari terakhir saya "
+            "bekerja ialah {last_day}."
+        ),
+        "gratitude_ach": (
+            "Tempoh perkhidmatan saya di {company} amat bermakna. Saya amat menghargai peluang "
+            "untuk {achievements}, serta perkembangan profesional, bimbingan, dan semangat "
+            "kerjasama yang saya nikmati sepanjang tempoh ini."
+        ),
+        "gratitude_noach": (
+            "Tempoh perkhidmatan saya di {company} amat bermakna, dan saya menghargai "
+            "perkembangan profesional, bimbingan, dan semangat kerjasama yang saya nikmati "
+            "sepanjang tempoh ini."
+        ),
+        "handover": (
+            "Saya komited untuk memastikan proses peralihan tugas berjalan lancar dan "
+            "profesional sepanjang baki tempoh perkhidmatan saya. Saya sedia membantu "
+            "menyerahkan tanggungjawab, mendokumentasikan kerja yang sedang berjalan, melatih "
+            "pengganti, serta menyiapkan sebarang tugasan tertunggak dengan sebaik mungkin."
+        ),
+        "closing_para": (
+            "Terima kasih atas bimbingan dan sokongan yang diberikan sepanjang saya berkhidmat "
+            "di sini. Saya mendoakan agar {company} terus maju dan berjaya, dan berharap dapat "
+            "terus berhubung pada masa hadapan."
+        ),
+        "signoff": "Yang benar,",
+    },
+    "zh": {
+        "filename_prefix": "辞职信",
+        "title": "辞 职 信",
+        "subject": "事由：辞去{position}职务",
+        "salutation_named": "尊敬的{name}：",
+        "salutation_generic": "尊敬的领导：",
+        "opening_notice": (
+            "兹正式通知贵公司，本人决定辞去在{company}担任的{position}职务。根据本人雇佣合约的"
+            "规定，本人将履行{n}个月的通知期，最后工作日为{last_day}。"
+        ),
+        "opening_immediate": (
+            "兹正式通知贵公司，本人决定即时辞去在{company}担任的{position}职务，最后工作日为"
+            "{last_day}。"
+        ),
+        "gratitude_ach": (
+            "在{company}工作的这段时间令本人获益良多。本人尤其感激能有机会{achievements}，"
+            "亦十分珍惜在职期间所获得的专业成长、悉心指导与团队协作。"
+        ),
+        "gratitude_noach": (
+            "在{company}工作的这段时间令本人获益良多，本人十分珍惜在职期间所获得的专业成长、"
+            "悉心指导与团队协作。"
+        ),
+        "handover": (
+            "在余下的任期内，本人承诺确保工作顺利、专业地交接。本人乐意协助移交各项职责、"
+            "整理在办事务的记录、培训接任人员，并尽力完成一切未尽事宜。"
+        ),
+        "closing_para": (
+            "感谢您在本人任职期间给予的指导与支持。谨祝您与{company}事业蒸蒸日上，"
+            "并期盼日后仍能保持联系。"
+        ),
+        "signoff": "此致敬礼！",
+    },
+}
+
+
+# --------------------------------------------------------------------------- #
+# Console / encoding setup (so Chinese never crashes a legacy Windows console)
+# --------------------------------------------------------------------------- #
+def configure_console():
+    for name in ("stdout", "stderr", "stdin"):
+        stream = getattr(sys, name, None)
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+# --------------------------------------------------------------------------- #
+# Input helpers
+# --------------------------------------------------------------------------- #
+def _strip_bom(text):
+    """Remove a leading byte-order mark, including a UTF-8 BOM that was decoded
+    under a legacy Windows code page (which appears as the characters 'ï»¿')."""
+    for bom in ("﻿", "ï»¿"):  # UTF-8 BOM, and its cp1252 mis-decode
+        if text.startswith(bom):
+            return text[len(bom):]
+    return text
+
+
+def ask(label, default="", required=False):
+    """Prompt for a line of text. Enter accepts the [default] shown."""
+    suffix = f" [{default}]" if default else ""
+    while True:
+        try:
+            value = _strip_bom(input(f"{label}{suffix}: ")).strip()
+        except EOFError:
+            value = ""
+        if not value:
+            value = default
+        if required and not value:
+            print("  -> This field is required. Please enter a value.")
+            continue
+        return value
+
+
+def ask_date(label, default_today=False):
+    """Prompt for a date in yyyy-MM-dd format and return a date object."""
+    default = date.today().isoformat() if default_today else ""
+    while True:
+        raw = ask(label, default=default)
+        try:
+            return datetime.strptime(raw, "%Y-%m-%d").date()
+        except ValueError:
+            print("  -> Invalid date. Use the format yyyy-MM-dd, e.g. 2026-06-28.")
+
+
+def ask_int(label, default=None, min_value=0):
+    """Prompt for a whole number >= min_value."""
+    shown = "" if default is None else str(default)
+    while True:
+        raw = ask(label, default=shown)
+        try:
+            value = int(raw)
+        except ValueError:
+            print("  -> Please enter a whole number, e.g. 1, 2 or 3.")
+            continue
+        if value < min_value:
+            print(f"  -> Please enter a number of {min_value} or more.")
+            continue
+        return value
+
+
+def ask_yes_no(label, default_yes=True):
+    hint = "Y/n" if default_yes else "y/N"
+    try:
+        raw = _strip_bom(input(f"{label} [{hint}]: ")).strip().lower()
+    except EOFError:
+        return default_yes
+    if not raw:
+        return default_yes
+    return raw in ("y", "yes")
+
+
+def ask_language():
+    print("Select letter language / Pilih bahasa surat / 选择信件语言:")
+    print("  1. English (default)")
+    print("  2. Bahasa Melayu")
+    print("  3. 中文 (简体)")
+    while True:
+        try:
+            raw = _strip_bom(input("Enter 1, 2 or 3 [1]: ")).strip()
+        except EOFError:
+            raw = ""
+        if raw in LANGUAGE_CHOICES:
+            return LANGUAGE_CHOICES[raw]
+        print("  -> Please enter 1, 2 or 3.")
+
+
+# --------------------------------------------------------------------------- #
+# Date maths
+# --------------------------------------------------------------------------- #
+def add_months(start, months):
+    """Add a number of whole months to a date, clamping to month length."""
+    total = start.month - 1 + months
+    year = start.year + total // 12
+    month = total % 12 + 1
+    last_day_of_month = calendar.monthrange(year, month)[1]
+    return date(year, month, min(start.day, last_day_of_month))
+
+
+def compute_last_working_day(start, months):
+    """Last working day = notice date + N months - 1 day (serve through the period)."""
+    if months <= 0:
+        return start
+    return add_months(start, months) - timedelta(days=1)
+
+
+# --------------------------------------------------------------------------- #
+# Fonts (for the PDF)
+# --------------------------------------------------------------------------- #
+class CJKFontError(Exception):
+    """Raised when a Chinese letter is requested but no CJK font is available."""
+
+
+def find_cjk_font():
+    """Return a path to a system font that can render Chinese, or None."""
+    candidates = [
+        r"C:\Windows\Fonts\msyh.ttc",      # Microsoft YaHei (Windows)
+        r"C:\Windows\Fonts\simsun.ttc",    # SimSun (Windows)
+        r"C:\Windows\Fonts\simhei.ttf",    # SimHei (Windows)
+        r"C:\Windows\Fonts\Deng.ttf",      # DengXian (Windows)
+        "/System/Library/Fonts/PingFang.ttc",                 # macOS
+        "/System/Library/Fonts/STHeiti Light.ttc",            # macOS
+        "/System/Library/Fonts/Supplemental/Songti.ttc",      # macOS
+        "/Library/Fonts/Arial Unicode.ttf",                   # macOS (older)
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",   # Linux
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",   # Linux
+        "/usr/share/fonts/opentype/noto/NotoSansSC-Regular.otf",    # Linux
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# Letter content (written to an experienced-HR standard, per language)
+# --------------------------------------------------------------------------- #
+def build_letter(d, lang):
+    t = TRANSLATIONS[lang]
+    months = d["notice_months"]
+    kw = dict(
+        position=d["your_position"],
+        company=d["company"],
+        name=d.get("recipient_name", ""),
+        n=months,
+        month_word=("month" if months == 1 else "months"),
+        last_day=d["last_day"],
+        achievements=d.get("achievements", ""),
+    )
+
+    opening = (t["opening_immediate"] if months <= 0 else t["opening_notice"]).format(**kw)
+    gratitude = (t["gratitude_ach"] if d.get("achievements") else t["gratitude_noach"]).format(**kw)
+    handover = t["handover"].format(**kw)
+    closing_para = t["closing_para"].format(**kw)
+    salutation = t["salutation_named"].format(**kw) if d.get("recipient_name") else t["salutation_generic"]
+    subject = t["subject"].format(**kw)
+
+    sender_lines = [x for x in (
+        d["your_name"], d["your_position"], d.get("your_dept", ""),
+        d.get("your_email", ""), d.get("your_phone", ""),
+    ) if x]
+
+    recipient_lines = [x for x in (
+        d.get("recipient_name", ""), d.get("recipient_position", ""),
+        d["company"], d.get("addr1", ""), d.get("city", ""),
+    ) if x]
+
+    return {
+        "title": t["title"],
+        "sender_lines": sender_lines,
+        "date": d["letter_date"],
+        "recipient_lines": recipient_lines,
+        "subject": subject,
+        "salutation": salutation,
+        "paragraphs": [opening, gratitude, handover, closing_para],
+        "closing": t["signoff"],
+        "name": d["your_name"],
+        "position": d["your_position"],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Renderers
+# --------------------------------------------------------------------------- #
+def write_docx(c, path, lang):
+    doc = Document()
+
+    section = doc.sections[0]
+    section.page_width = Mm(210)
+    section.page_height = Mm(297)
+    section.top_margin = Mm(25)
+    section.bottom_margin = Mm(25)
+    section.left_margin = Mm(25)
+    section.right_margin = Mm(25)
+
+    normal = doc.styles["Normal"]
+    normal.font.size = Pt(11)
+    if lang == "zh":
+        normal.font.name = "Microsoft YaHei"
+        rpr = normal.element.get_or_add_rPr()
+        rfonts = rpr.get_or_add_rFonts()
+        rfonts.set(qn("w:eastAsia"), "Microsoft YaHei")
+    else:
+        normal.font.name = "Calibri"
+
+    def para(text="", bold=False, align=None, size=None, space_after=4):
+        p = doc.add_paragraph()
+        if text:
+            run = p.add_run(text)
+            run.bold = bold
+            if size:
+                run.font.size = Pt(size)
+        if align is not None:
+            p.alignment = align
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(space_after)
+        return p
+
+    para(c["title"], bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, size=14, space_after=12)
+    for i, line in enumerate(c["sender_lines"]):
+        para(line, bold=(i == 0), space_after=0)
+    para("", space_after=4)
+    para(c["date"], space_after=8)
+    for line in c["recipient_lines"]:
+        para(line, space_after=0)
+    para("", space_after=4)
+    para(c["subject"], bold=True, space_after=8)
+    para(c["salutation"], space_after=8)
+    for body in c["paragraphs"]:
+        para(body, space_after=8)
+    para(c["closing"], space_after=0)
+    para("", space_after=0)
+    para("", space_after=0)
+    para(c["name"], bold=True, space_after=0)
+    para(c["position"], space_after=0)
+
+    doc.save(str(path))
+
+
+def pdf_safe(text):
+    """Make text safe for the PDF core font (Latin-1); normalise smart punctuation."""
+    if not text:
+        return ""
+    replacements = {
+        "‘": "'", "’": "'", "“": '"', "”": '"',
+        "–": "-", "—": "-", "…": "...", " ": " ",
+    }
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def write_pdf(c, path, lang):
+    core = (lang != "zh")
+    font_path = None
+    if not core:
+        font_path = find_cjk_font()
+        if not font_path:
+            raise CJKFontError()
+
+    pdf = FPDF(format="A4", unit="mm")
+    pdf.set_auto_page_break(True, margin=25)
+    pdf.set_margins(25, 25, 25)
+    pdf.add_page()
+
+    if core:
+        family = "Helvetica"
+    else:
+        family = "Letter"
+        pdf.add_font(family, "", font_path)
+
+    def block(text, size=11, bold=False, align="L", height=6, gap=0):
+        style = "B" if (bold and core) else ""
+        if not core and align == "J":
+            align = "L"
+        pdf.set_font(family, style, size)
+        out = pdf_safe(text) if core else text
+        pdf.multi_cell(0, height, out, align=align, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        if gap:
+            pdf.ln(gap)
+
+    block(c["title"], size=14, bold=True, align="C", height=8, gap=4)
+    for i, line in enumerate(c["sender_lines"]):
+        block(line, bold=(i == 0))
+    pdf.ln(3)
+    block(c["date"], gap=3)
+    for line in c["recipient_lines"]:
+        block(line)
+    pdf.ln(3)
+    block(c["subject"], bold=True, gap=3)
+    block(c["salutation"], gap=2)
+    for body in c["paragraphs"]:
+        block(body, align="J", gap=3)
+    block(c["closing"])
+    pdf.ln(14)
+    block(c["name"], bold=True)
+    block(c["position"])
+
+    pdf.output(str(path))
+
+
+# --------------------------------------------------------------------------- #
+# Output helpers
+# --------------------------------------------------------------------------- #
+def safe_filename(name):
+    """Keep letters (incl. Chinese), digits and spaces; drop invalid filename chars."""
+    cleaned = re.sub(r'[<>:"/\\|?*]', "", name)        # characters illegal in filenames
+    cleaned = re.sub(r"[\x00-\x1f]", "", cleaned)       # control characters
+    cleaned = re.sub(r"\s+", "_", cleaned.strip())      # whitespace -> underscore
+    cleaned = cleaned.strip("._-")
+    return cleaned or "letter"
+
+
+def unique_base(folder, base):
+    candidate = base
+    counter = 2
+    while (folder / f"{candidate}.docx").exists() or (folder / f"{candidate}.pdf").exists():
+        candidate = f"{base}_{counter}"
+        counter += 1
+    return candidate
+
+
+def open_folder(folder):
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(str(folder))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(folder)], check=False)
+    except Exception:
+        pass
+
+
+# --------------------------------------------------------------------------- #
+# Main
+# --------------------------------------------------------------------------- #
+def main():
+    configure_console()
+
+    print("=" * 50)
+    print("   HR Letter Generator  -  Resignation Letter")
+    print("=" * 50)
+    lang = ask_language()
+    print()
+    print("Answer the prompts below. Press Enter to accept a [default].")
+    print("Optional fields can be left blank by pressing Enter.\n")
+
+    print("-- Your details --")
+    your_name = ask("Your full name", required=True)
+    your_position = ask("Your position / job title", required=True)
+    your_dept = ask("Your department (optional)")
+    your_email = ask("Your email (optional)")
+    your_phone = ask("Your phone (optional)")
+
+    print("\n-- Recipient details --")
+    recipient_name = ask("Recipient's full name, e.g. your manager (optional)")
+    recipient_position = ask("Recipient's position / title (optional)")
+    company = ask("Company / organisation name", required=True)
+    addr1 = ask("Company address line 1 (optional)")
+    city = ask("City, Postcode (optional)")
+
+    print("\n-- Notice period --")
+    letter_date = ask_date("Date you are giving notice (yyyy-MM-dd)", default_today=True)
+    notice_months = ask_int("Notice period in months", default=1, min_value=0)
+    last_day = compute_last_working_day(letter_date, notice_months)
+    print(f"\n  Computed last working day: {last_day.isoformat()}")
+    if not ask_yes_no("  Use this last working day?", default_yes=True):
+        last_day = ask_date("  Enter the correct last working day (yyyy-MM-dd)")
+
+    print("\n-- Optional --")
+    achievements = ask(
+        "Key achievement(s) to mention, in the chosen language,\n"
+        "  e.g. 'lead the payroll system migration' (optional)"
+    )
+
+    data = {
+        "your_name": your_name,
+        "your_position": your_position,
+        "your_dept": your_dept,
+        "your_email": your_email,
+        "your_phone": your_phone,
+        "recipient_name": recipient_name,
+        "recipient_position": recipient_position,
+        "company": company,
+        "addr1": addr1,
+        "city": city,
+        "letter_date": letter_date.isoformat(),
+        "notice_months": notice_months,
+        "last_day": last_day.isoformat(),
+        "achievements": achievements,
+    }
+
+    print("\n" + "=" * 50)
+    print("  Review")
+    print("=" * 50)
+    print(f"  Language       : {lang}")
+    print(f"  Name           : {your_name}")
+    print(f"  Position       : {your_position}")
+    print(f"  Company        : {company}")
+    print(f"  Letter date    : {data['letter_date']}")
+    print(f"  Notice period  : {notice_months} month(s)")
+    print(f"  Last working   : {data['last_day']}")
+    print("=" * 50)
+    if not ask_yes_no("\nGenerate the letter now?", default_yes=True):
+        print("Cancelled. No files were created.")
+        return
+
+    content = build_letter(data, lang)
+    outdir = Path(__file__).resolve().parent / "generated_letters"
+    outdir.mkdir(exist_ok=True)
+    prefix = TRANSLATIONS[lang]["filename_prefix"]
+    base = unique_base(outdir, f"{prefix}_{safe_filename(your_name)}")
+    docx_path = outdir / f"{base}.docx"
+    pdf_path = outdir / f"{base}.pdf"
+
+    write_docx(content, docx_path, lang)
+    print("\nDone! Your letter has been created:")
+    print(f"  - {docx_path}")
+    try:
+        write_pdf(content, pdf_path, lang)
+        print(f"  - {pdf_path}")
+    except CJKFontError:
+        print("  - (PDF skipped: no Chinese-capable font was found on this computer.)")
+        print("    The Word (.docx) file above contains the complete Chinese letter.")
+    open_folder(outdir)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelled by user.")
+        sys.exit(1)
