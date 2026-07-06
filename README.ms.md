@@ -3,14 +3,16 @@
 [English](README.md) | **Bahasa Melayu** | [中文](README.zh.md)
 
 Satu alat ringkas yang tidak memerlukan pengalaman, untuk menjana **surat peletakan jawatan**
-profesional dalam bentuk **Word (.docx)** dan **PDF (.pdf)**, dalam **Bahasa Inggeris, Bahasa
-Melayu, atau Bahasa Cina (Ringkas)**.
+profesional dalam bentuk **Word (.docx)** dan **PDF (.pdf)**, serta dua **draf e-mel** yang sedia
+dihantar, dalam **Bahasa Inggeris, Bahasa Melayu, atau Bahasa Cina (Ringkas)**.
 
 Anda hanya menjawab beberapa soalan, dan ia akan:
 
 - menulis surat mengikut standard HR / perekrut berpengalaman, dalam bahasa pilihan anda,
 - mengira **hari terakhir bekerja** anda secara automatik daripada tarikh notis + tempoh notis (dalam hari, minggu, atau bulan),
-- menyimpan kedua-dua fail ke dalam folder `generated_letters/`.
+- menyediakan **dua e-mel yang sepadan** — satu untuk dihantar *bersama surat sebagai lampiran*, dan
+  satu lagi yang meletakkan keseluruhan peletakan jawatan *di dalam badan e-mel* (tanpa perlu lampiran),
+- menyimpan semua fail ke dalam folder `generated_letters/`.
 
 Semua tarikh menggunakan format **`yyyy-MM-dd`** (cth. `2026-06-28`).
 
@@ -47,7 +49,7 @@ Kali pertama mengambil masa kira-kira seminit untuk pemasangan; kali seterusnya 
 
 - **Bahasa:** Inggeris (lalai), Bahasa Melayu, atau 中文 (简体) — keseluruhan surat ditulis dalam bahasa ini
 - **Maklumat anda:** nama penuh, jawatan, jabatan, e-mel, telefon
-- **Penerima:** nama, jawatan, syarikat / organisasi, alamat
+- **Penerima:** nama, jawatan, e-mel (untuk baris `To:` e-mel), syarikat / organisasi, alamat
 - **Notis:** tarikh anda memberi notis (lalai hari ini), kemudian unit tempoh notis (hari, minggu, atau bulan) dan jumlahnya
 - **Pilihan:** satu pencapaian utama untuk disebut dalam surat
 
@@ -70,13 +72,26 @@ tarikh yang dikira semasa menjawab soalan. Memasukkan `0` akan menghasilkan sura
 ## Output
 
 Fail disimpan dalam `generated_letters/`. Namanya menggunakan awalan mengikut bahasa pilihan
-diikuti nama anda, cth.:
+diikuti nama anda. Setiap kali dijalankan, anda memperoleh surat (`.docx` + `.pdf`) **dan** dua
+draf e-mel (`.txt`), cth.:
 
 ```
-Resignation_Letter_Jane_Doe.docx             (Inggeris)
-Surat_Peletakan_Jawatan_Ahmad_bin_Ali.docx   (Bahasa Melayu)
-辞职信_张伟.pdf                                 (中文)
+Resignation_Letter_Jane_Doe.docx                                 (surat — Word)
+Resignation_Letter_Jane_Doe.pdf                                  (surat — PDF)
+Resignation_Letter_Jane_Doe_Email_1_with_letter_attached.txt     (e-mel iringan — lampirkan surat)
+Resignation_Letter_Jane_Doe_Email_2_full_text_no_attachment.txt  (peletakan jawatan penuh dalam badan)
 ```
+
+**Dua e-mel tersebut:**
+
+- **E-mel 1 — dengan surat sebagai lampiran:** nota iringan yang ringkas dan sopan. Lampirkan fail
+  `.docx` atau `.pdf` di atas, kemudian hantar.
+- **E-mel 2 — tanpa lampiran:** peletakan jawatan lengkap ditulis terus di dalam badan e-mel, untuk
+  keadaan apabila anda tidak mahu menghantar lampiran.
+
+Kedua-duanya juga dipaparkan pada skrin pada akhirnya supaya anda boleh menyalinnya terus ke dalam
+Gmail/Outlook. Setiap satu bermula dengan baris `Subject:` (dan baris `To:` jika anda memasukkan
+e-mel penerima).
 
 (Jika fail dengan nama yang sama sudah wujud, satu nombor ditambah supaya tiada fail ditimpa.)
 

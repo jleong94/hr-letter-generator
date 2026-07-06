@@ -7,6 +7,12 @@ notice date + notice period (in days, weeks, or months), and writes a profession
 letter as both Word (.docx) and PDF (.pdf) into the ./generated_letters folder.
 The letter content is generated in the language chosen at the start.
 
+Alongside the letter it also writes two ready-to-send email drafts (.txt), in the
+same language:
+  1. a short cover email to send WITH the letter attached, and
+  2. a full-text email that carries the whole resignation in the body itself,
+     so no attachment is needed.
+
 This script is normally launched by run.cmd (Windows) or run.command / run.sh
 (macOS), which set up Python and the required packages automatically.
 """
@@ -83,6 +89,27 @@ TRANSLATIONS = {
             "{company} continued success, and I hope to remain in touch."
         ),
         "signoff": "Yours sincerely,",
+        # --- email drafts: header labels, subject, and the cover-email body ---
+        "email_label_to": "To",
+        "email_label_subject": "Subject",
+        "email_subject": "Resignation Notice - {your_name} ({position})",
+        "email_cover_notice": (
+            "I am writing to formally notify you of my resignation from the position of "
+            "{position} at {company}. My formal letter of resignation is attached to this "
+            "email for your records. In line with my notice period of {period}, my last "
+            "working day will be {last_day}."
+        ),
+        "email_cover_immediate": (
+            "I am writing to formally notify you of my resignation from the position of "
+            "{position} at {company}, with immediate effect. My formal letter of resignation "
+            "is attached to this email for your records, and my last working day will be "
+            "{last_day}."
+        ),
+        "email_cover_body": (
+            "I am committed to ensuring a smooth handover before I leave, and I am happy to "
+            "assist in any way to make the transition as seamless as possible. Thank you for "
+            "the support and guidance I have received during my time at {company}."
+        ),
     },
     "ms": {
         "filename_prefix": "Surat_Peletakan_Jawatan",
@@ -123,6 +150,28 @@ TRANSLATIONS = {
             "terus berhubung pada masa hadapan."
         ),
         "signoff": "Yang benar,",
+        # --- email drafts: header labels, subject, and the cover-email body ---
+        "email_label_to": "Kepada",
+        "email_label_subject": "Perkara",
+        "email_subject": "Notis Peletakan Jawatan - {your_name} ({position})",
+        "email_cover_notice": (
+            "Dengan segala hormatnya, saya ingin memaklumkan secara rasmi peletakan jawatan "
+            "saya sebagai {position} di {company}. Surat peletakan jawatan rasmi saya "
+            "disertakan bersama e-mel ini untuk simpanan pihak tuan/puan. Selaras dengan "
+            "tempoh notis saya selama {period}, hari terakhir saya bekerja ialah {last_day}."
+        ),
+        "email_cover_immediate": (
+            "Dengan segala hormatnya, saya ingin memaklumkan secara rasmi peletakan jawatan "
+            "saya sebagai {position} di {company}, berkuat kuasa serta-merta. Surat peletakan "
+            "jawatan rasmi saya disertakan bersama e-mel ini untuk simpanan pihak tuan/puan, "
+            "dan hari terakhir saya bekerja ialah {last_day}."
+        ),
+        "email_cover_body": (
+            "Saya komited untuk memastikan proses peralihan tugas berjalan lancar sebelum saya "
+            "berhenti, dan sedia membantu dengan apa-apa cara bagi melicinkan proses peralihan "
+            "ini. Terima kasih atas sokongan dan bimbingan yang saya terima sepanjang tempoh "
+            "saya berkhidmat di {company}."
+        ),
     },
     "zh": {
         "filename_prefix": "辞职信",
@@ -155,6 +204,23 @@ TRANSLATIONS = {
             "并期盼日后仍能保持联系。"
         ),
         "signoff": "此致敬礼！",
+        # --- email drafts: header labels, subject, and the cover-email body ---
+        "email_label_to": "收件人",
+        "email_label_subject": "主题",
+        "email_subject": "辞职通知：{your_name}（{position}）",
+        "email_cover_notice": (
+            "本人谨此正式通知，本人决定辞去在{company}担任的{position}职务。本人的正式辞职信"
+            "已随本邮件附上，敬请查收存档。根据本人{period}的通知期，本人的最后工作日为"
+            "{last_day}。"
+        ),
+        "email_cover_immediate": (
+            "本人谨此正式通知，本人决定即时辞去在{company}担任的{position}职务。本人的正式"
+            "辞职信已随本邮件附上，敬请查收存档，本人的最后工作日为{last_day}。"
+        ),
+        "email_cover_body": (
+            "在离职前，本人承诺确保各项工作顺利交接，并乐意尽力协助，使交接过程尽可能顺畅。"
+            "感谢本人在{company}任职期间所获得的支持与指导。"
+        ),
     },
 }
 
@@ -390,6 +456,82 @@ def build_letter(d, lang):
 
 
 # --------------------------------------------------------------------------- #
+# Email content (same language as the letter)
+#   - "with_attachment": a short cover email to send WITH the letter attached
+#   - "without_attachment": the full resignation carried in the email body,
+#     reusing the very paragraphs of the letter so the two never drift apart
+# --------------------------------------------------------------------------- #
+def build_emails(d, lang):
+    t = TRANSLATIONS[lang]
+    count = d["notice_count"]
+    unit = d["notice_unit"]
+    kw = dict(
+        position=d["your_position"],
+        company=d["company"],
+        your_name=d["your_name"],
+        name=d.get("recipient_name", ""),
+        period=format_period(count, unit, lang),
+        last_day=d["last_day"],
+        achievements=d.get("achievements", ""),
+    )
+
+    salutation = t["salutation_named"].format(**kw) if d.get("recipient_name") else t["salutation_generic"]
+
+    # "To:" line, shown only when we actually have an address to write.
+    to_line = ""
+    recipient_email = d.get("recipient_email", "")
+    if recipient_email:
+        rname = d.get("recipient_name", "")
+        to_line = f"{rname} <{recipient_email}>" if rname else recipient_email
+
+    # Signature: sign-off, then name / position / department / contact details.
+    signature = [t["signoff"], d["your_name"], d["your_position"]]
+    for extra in (d.get("your_dept", ""), d.get("your_email", ""), d.get("your_phone", "")):
+        if extra:
+            signature.append(extra)
+
+    # Email 1 - cover note to accompany the attached letter.
+    cover_open = (t["email_cover_immediate"] if count <= 0 else t["email_cover_notice"]).format(**kw)
+    with_attachment = [cover_open, t["email_cover_body"].format(**kw)]
+
+    # Email 2 - the full resignation written straight into the email body.
+    opening = (t["opening_immediate"] if count <= 0 else t["opening_notice"]).format(**kw)
+    gratitude = (t["gratitude_ach"] if d.get("achievements") else t["gratitude_noach"]).format(**kw)
+    without_attachment = [opening, gratitude, t["handover"].format(**kw), t["closing_para"].format(**kw)]
+
+    return {
+        "label_to": t["email_label_to"],
+        "label_subject": t["email_label_subject"],
+        "to": to_line,
+        "subject": t["email_subject"].format(**kw),
+        "salutation": salutation,
+        "signature": signature,
+        "with_attachment": with_attachment,
+        "without_attachment": without_attachment,
+    }
+
+
+def render_email(em, which):
+    """Render one email variant ('with_attachment' / 'without_attachment') as
+    plain text: header line(s), a blank line, salutation, body and signature."""
+    lines = []
+    if em["to"]:
+        lines.append(f"{em['label_to']}: {em['to']}")
+    lines.append(f"{em['label_subject']}: {em['subject']}")
+    lines.append("")
+    lines.append(em["salutation"])
+    lines.append("")
+    for para in em[which]:
+        lines.append(para)
+        lines.append("")
+    signoff, *details = em["signature"]
+    lines.append(signoff)
+    lines.append("")
+    lines.extend(details)
+    return "\n".join(lines).rstrip() + "\n"
+
+
+# --------------------------------------------------------------------------- #
 # Renderers
 # --------------------------------------------------------------------------- #
 def write_docx(c, path, lang):
@@ -530,6 +672,11 @@ def unique_base(folder, base):
     return candidate
 
 
+def write_text(path, text):
+    """Write UTF-8 text (used for the email drafts) with normal newlines."""
+    path.write_text(text, encoding="utf-8")
+
+
 def open_folder(folder):
     try:
         if sys.platform.startswith("win"):
@@ -564,6 +711,7 @@ def main():
     print("\n-- Recipient details --")
     recipient_name = ask("Recipient's full name, e.g. your manager (optional)")
     recipient_position = ask("Recipient's position / title (optional)")
+    recipient_email = ask("Recipient's email, for the email 'To:' line (optional)")
     company = ask("Company / organisation name", required=True)
     addr1 = ask("Company address line 1 (optional)")
     city = ask("City, Postcode (optional)")
@@ -591,6 +739,7 @@ def main():
         "your_phone": your_phone,
         "recipient_name": recipient_name,
         "recipient_position": recipient_position,
+        "recipient_email": recipient_email,
         "company": company,
         "addr1": addr1,
         "city": city,
@@ -625,7 +774,7 @@ def main():
     pdf_path = outdir / f"{base}.pdf"
 
     write_docx(content, docx_path, lang)
-    print("\nDone! Your letter has been created:")
+    print("\nDone! Your files have been created:")
     print(f"  - {docx_path}")
     try:
         write_pdf(content, pdf_path, lang)
@@ -633,6 +782,30 @@ def main():
     except CJKFontError:
         print("  - (PDF skipped: no Chinese-capable font was found on this computer.)")
         print("    The Word (.docx) file above contains the complete Chinese letter.")
+
+    # Email drafts: one to send WITH the letter attached, one that carries the
+    # full resignation in the body (no attachment). Saved as .txt and shown below.
+    emails = build_emails(data, lang)
+    cover_text = render_email(emails, "with_attachment")
+    full_text = render_email(emails, "without_attachment")
+    cover_path = outdir / f"{base}_Email_1_with_letter_attached.txt"
+    full_path = outdir / f"{base}_Email_2_full_text_no_attachment.txt"
+    write_text(cover_path, cover_text)
+    write_text(full_path, full_text)
+    print(f"  - {cover_path}")
+    print(f"  - {full_path}")
+
+    print("\n" + "=" * 60)
+    print("  EMAIL 1  -  send this WITH your resignation letter attached")
+    print("  (attach the .docx or .pdf above before sending)")
+    print("=" * 60 + "\n")
+    print(cover_text)
+    print("=" * 60)
+    print("  EMAIL 2  -  send this on its own, no attachment needed")
+    print("  (the full resignation is written in the email body)")
+    print("=" * 60 + "\n")
+    print(full_text)
+
     open_folder(outdir)
 
 

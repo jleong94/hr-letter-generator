@@ -3,13 +3,16 @@
 **English** | [Bahasa Melayu](README.ms.md) | [中文](README.zh.md)
 
 A simple, no-experience-needed tool that generates a professional **resignation letter**
-as both **Word (.docx)** and **PDF (.pdf)**, in **English, Bahasa Melayu, or Chinese (Simplified)**.
+as both **Word (.docx)** and **PDF (.pdf)**, plus two ready-to-send **email drafts**, in
+**English, Bahasa Melayu, or Chinese (Simplified)**.
 
 You answer a few questions, and it:
 
 - writes the letter to an experienced-HR / recruiter standard, in the language you choose,
 - auto-calculates your **last working day** from the notice date + notice period (in days, weeks, or months),
-- saves both files into a `generated_letters/` folder.
+- drafts **two matching emails** — one to send *with the letter attached*, and one that puts the
+  whole resignation *in the email body* (no attachment needed),
+- saves everything into a `generated_letters/` folder.
 
 All dates use the format **`yyyy-MM-dd`** (e.g. `2026-06-28`).
 
@@ -46,7 +49,7 @@ The first run takes a minute while things install; later runs start immediately.
 
 - **Language:** English (default), Bahasa Melayu, or 中文 (简体) — the whole letter is written in this language
 - **Your details:** full name, job title, department, email, phone
-- **Recipient:** name, title, company / organisation, address
+- **Recipient:** name, title, email (used for the emails' `To:` line), company / organisation, address
 - **Notice:** the date you are giving notice (defaults to today), then the notice-period unit (days, weeks, or months) and how many
 - **Optional:** a key achievement to mention in the letter
 
@@ -69,13 +72,24 @@ date during the prompts. Entering `0` produces a "with immediate effect" letter.
 ## Output
 
 Files are saved in `generated_letters/`. The name uses a prefix for the chosen language plus your
-name, e.g.:
+name. For each run you get the letter (`.docx` + `.pdf`) **and** two email drafts (`.txt`), e.g.:
 
 ```
-Resignation_Letter_Jane_Doe.docx             (English)
-Surat_Peletakan_Jawatan_Ahmad_bin_Ali.docx   (Bahasa Melayu)
-辞职信_张伟.pdf                                 (中文)
+Resignation_Letter_Jane_Doe.docx                                 (the letter — Word)
+Resignation_Letter_Jane_Doe.pdf                                  (the letter — PDF)
+Resignation_Letter_Jane_Doe_Email_1_with_letter_attached.txt     (cover email — attach the letter)
+Resignation_Letter_Jane_Doe_Email_2_full_text_no_attachment.txt  (full resignation in the body)
 ```
+
+**The two emails:**
+
+- **Email 1 — with the letter attached:** a short, polite cover note. Attach the `.docx` or `.pdf`
+  above, then send.
+- **Email 2 — no attachment:** the complete resignation written straight into the email body, for
+  when you would rather not send an attachment.
+
+Both are also printed on screen at the end so you can copy them straight into Gmail/Outlook. Each
+starts with a `Subject:` line (and a `To:` line if you entered the recipient's email).
 
 (If a file with the same name already exists, a number is added so nothing is overwritten.)
 
